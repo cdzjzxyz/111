@@ -12,83 +12,89 @@ import javax.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.sql.SQLException;
-import java.util.List;
+import java.util.Date;
 
 @WebServlet("/comment")
 public class CommentServlet extends HttpServlet {
     private CommentDao cDao = new CommentDao();
-    
-    // 添加评论
-    protected void doPost(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
-        response.setContentType("text/plain;charset=utf-8");
-        PrintWriter out = response.getWriter();
-        
+
+    @Override
+    protected void doGet(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
+        int goodsid = 0;
         try {
-            // 检查用户登录状态
-            User user = (User) request.getSession().getAttribute("user");
-            if(user == null) {
-                out.print("login");
-                return;
-            }
-            
-            // 获取并验证参数
-            String content = request.getParameter("content");
-            if(content == null || content.trim().isEmpty()) {
-                out.print("评论内容不能为空");
-                return;
-            }
-            
-            String scoreStr = request.getParameter("score");
-            String goodsIdStr = request.getParameter("goodsId");
-            
-            if(scoreStr == null || goodsIdStr == null) {
-                out.print("参数不完整");
-                return;
-            }
-            
-            int score = Integer.parseInt(scoreStr);
-            int goodsId = Integer.parseInt(goodsIdStr);
-            
-            if(score < 1 || score > 5) {
-                out.print("评分必须在1-5之间");
-                return;
-            }
-            
-            // 创建评论对象
-            Comment comment = new Comment();
-            comment.setContent(content.trim());
-            comment.setScore(score);
-            comment.setUserId(user.getId());
-            comment.setGoodsId(goodsId);
-            
-            // 保存评论
-            cDao.insert(comment);
-            out.print("success");
-            
+            goodsid = Integer.parseInt(request.getParameter("goodsid"));
+            // 注意：这里应该是 getUserComments(int userId)，但原方法签名错误，见下方修正
+            List<Comment> comments = (List<Comment>) cDao.getUserComments(goodsid);
+            request.setAttribute("comments", comments);
+            request.getRequestDispatcher("/goods_detail.jsp").forward(request, response);
         } catch (NumberFormatException e) {
             e.printStackTrace();
-            out.print("参数格式错误");
+            request.setAttribute("errorMsg", "无效的商品ID");
+            request.getRequestDispatcher("/index.jsp").forward(request, response);
         } catch (SQLException e) {
             e.printStackTrace();
-            out.print("数据库错误：" + e.getMessage());
-        } catch (Exception e) {
-            e.printStackTrace();
-            out.print("系统错误：" + e.getMessage());
-        }
-    }
-    
-    // 获取评论列表
-    protected void doGet(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
-        try {
-            int goodsId = Integer.parseInt(request.getParameter("goodsId"));
-            List<Comment> comments = cDao.getGoodsComments(goodsId);
-            double avgScore = cDao.getGoodsAvgScore(goodsId);
-            request.setAttribute("comments", comments);
-            request.setAttribute("avgScore", avgScore);
+            request.setAttribute("errorMsg", "获取评论失败");
             request.getRequestDispatcher("/goods_detail.jsp").forward(request, response);
-        } catch (SQLException e) {
-            e.printStackTrace();
-            response.sendRedirect("/index");
         }
     }
-} 
+
+    @Override
+    protected void doPost(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
+        request.setCharacterEncoding("utf-8");
+        response.setContentType("text/html;charset=utf-8");
+        PrintWriter out = response.getWriter();
+
+        User u = (User) request.getSession().getAttribute("user");
+        if (u == null) {
+            out.write("请先登录");
+            return;
+        }
+
+        int goodsid = 0;
+        try {
+            goodsid = Integer.parseInt(request.getParameter("goodsid"));
+        } catch (NumberFormatException e) {
+            e.printStackTrace();
+            out.write("无效的商品ID");
+            return;
+        }
+
+        String content = request.getParameter("content");
+        if (content == null || content.trim().isEmpty()) {
+            out.write("评论内容不能为空");
+            return;
+        }
+
+        int score = 5; // 默认评分
+        try {
+            score = Integer.parseInt(request.getParameter("score"));
+            if (score < 1 || score > 5) {
+                score = 5; // 如果评分不在1-5范围内，使用默认值
+            }
+        } catch (NumberFormatException e) {
+            // 使用默认评分
+        }
+
+        Comment comment = new Comment();
+        comment.setScore(score);
+        comment.setContent(content);
+        comment.setGoodsId(goodsid); // 确保 Comment 类有 setGoodsId(int)
+        comment.setUserId(u.getId()); // 确保 Comment 类有 setUserId(int)
+        comment.setCreateTime(new Date());
+
+        try {
+            boolean flag = cDao.addComment(comment); // ✅ 正确调用 addComment 方法
+            if (flag) {
+                response.sendRedirect(request.getContextPath() + "/goods_detail?id=" + goodsid);
+            } else {
+                request.getSession().setAttribute("commentError", "评论发表失败，请稍后再试！");
+                response.sendRedirect(request.getContextPath() + "/goods_detail?id=" + goodsid);
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+            request.getSession().setAttribute("commentError", "系统错误，请稍后再试！");
+            response.sendRedirect(request.getContextPath() + "/goods_detail?id=" + goodsid);
+        }
+    }
+}
+

@@ -260,37 +260,42 @@
 	
 	<!-- 添加收藏相关的JavaScript代码 -->
 	<script>
-	$(function() {
-		$('.favorite-btn').click(function() {
-			var $btn = $(this);
-			var goodsId = $btn.data('id');
-			var action = $btn.find('.fa-heart').length > 0 ? 'remove' : 'add';
-			
-			$.ajax({
-				type: 'POST',
-				url: 'favorite',
-				data: {
-					action: action,
-					goodsId: goodsId
-				},
-				success: function(response) {
-					if(response === 'success') {
-						if(action === 'add') {
-							$btn.find('i').removeClass('fa-heart-o').addClass('fa-heart');
-							$btn.find('span').text('已收藏');
-						} else {
-							$btn.find('i').removeClass('fa-heart').addClass('fa-heart-o');
-							$btn.find('span').text('收藏');
-						}
-					} else if(response === 'login') {
-						location.href = 'user_login.jsp';
-					} else {
-						alert('操作失败，请稍后重试！');
-					}
+	function toggleFavorite(goodsid) {
+		$.ajax({
+			url: '${pageContext.request.contextPath}/favorite',
+			type: 'POST',
+			data: {
+				goodsid: goodsid
+			},
+			success: function(response) {
+				if (response === 'tologin') {
+					layer.msg('请先登录!');
+					return;
 				}
-			});
+				
+				if (response === 'added' || response === 'removed') {
+					var $btn = $('.favorite-btn');
+					var $icon = $btn.find('i');
+					var $text = $btn.find('span');
+					
+					if (response === 'added') {
+						$icon.removeClass('fa-heart-o').addClass('fa-heart');
+						$text.text('已收藏');
+						layer.msg('收藏成功!');
+					} else {
+						$icon.removeClass('fa-heart').addClass('fa-heart-o');
+						$text.text('收藏');
+						layer.msg('取消收藏成功!');
+					}
+				} else {
+					layer.msg('操作失败，请稍后再试！');
+				}
+			},
+			error: function() {
+				layer.msg('网络请求失败，请检查您的连接！');
+			}
 		});
-	});
+	}
 	</script>
 	
 	
